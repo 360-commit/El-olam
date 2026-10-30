@@ -1,0 +1,475 @@
+// ─── PRISMA SCHEMA ────────────────────────────────────────────────────────────
+// El-Olam International School Management System
+// Database: PostgreSQL (Supabase recommended)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+}
+
+enum ClassLevel {
+  DAY_CARE
+  CRECHE
+  PLAY_CLASS
+  KINDERGARTEN
+  NURSERY
+  LEARNING_TO_READ
+  GRADE_1
+  GRADE_2
+  GRADE_3
+  GRADE_4
+  GRADE_5
+  GRADE_6
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  LEAVE
+}
+
+enum FeeStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+}
+
+enum PaymentMethod {
+  CASH
+  MOBILE_MONEY
+  BANK_TRANSFER
+  PAYSTACK
+}
+
+enum NoticePriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum NoticeType {
+  EXAM
+  MEETING
+  FINANCE
+  EVENT
+  HOLIDAY
+  GENERAL
+}
+
+enum Term {
+  TERM_1
+  TERM_2
+  TERM_3
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+// ─── USER (Auth) ──────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  role          Role
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  teacher       Teacher?
+  student       Student?
+  parent        Parent?
+  admin         Admin?
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// ─── ADMIN ───────────────────────────────────────────────────────────────────
+
+model Admin {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  firstName   String
+  lastName    String
+  phone       String?
+  avatarUrl   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("admins")
+}
+
+// ─── TEACHER ─────────────────────────────────────────────────────────────────
+
+model Teacher {
+  id            String     @id @default(uuid())
+  userId        String     @unique
+  firstName     String
+  lastName      String
+  phone         String?
+  gender        Gender?
+  dateOfBirth   DateTime?
+  address       String?
+  avatarUrl     String?
+  subject       String
+  classLevel    ClassLevel?
+  qualification String?
+  experience    Int        @default(0)
+  employedAt    DateTime   @default(now())
+  isActive      Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  classes       ClassRoom[]
+  results       Result[]
+  timetableSlots TimetableSlot[]
+  notices       Notice[]
+
+  @@map("teachers")
+}
+
+// ─── STUDENT ─────────────────────────────────────────────────────────────────
+
+model Student {
+  id            String     @id @default(uuid())
+  userId        String     @unique
+  firstName     String
+  lastName      String
+  rollNumber    String     @unique
+  classLevel    ClassLevel
+  gender        Gender?
+  dateOfBirth   DateTime?
+  address       String?
+  avatarUrl     String?
+  bloodGroup    String?
+  allergies     String?
+  isActive      Boolean    @default(true)
+  enrolledAt    DateTime   @default(now())
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  classroom     ClassRoom? @relation(fields: [classRoomId], references: [id])
+  classRoomId   String?
+  parents       StudentParent[]
+  attendance    Attendance[]
+  fees          Fee[]
+  results       Result[]
+  libraryLoans  LibraryLoan[]
+
+  @@map("students")
+}
+
+// ─── PARENT ──────────────────────────────────────────────────────────────────
+
+model Parent {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  firstName   String
+  lastName    String
+  phone       String
+  phone2      String?
+  occupation  String?
+  address     String?
+  avatarUrl   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  children    StudentParent[]
+
+  @@map("parents")
+}
+
+model StudentParent {
+  studentId   String
+  parentId    String
+  relationship String  @default("Guardian")
+  isPrimary   Boolean @default(false)
+
+  student     Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  parent      Parent  @relation(fields: [parentId], references: [id], onDelete: Cascade)
+
+  @@id([studentId, parentId])
+  @@map("student_parents")
+}
+
+// ─── CLASS ROOM ───────────────────────────────────────────────────────────────
+
+model ClassRoom {
+  id            String     @id @default(uuid())
+  name          String
+  level         ClassLevel @unique
+  teacherId     String?
+  academicYear  String
+  capacity      Int        @default(30)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  teacher       Teacher?   @relation(fields: [teacherId], references: [id])
+  students      Student[]
+  timetable     TimetableSlot[]
+
+  @@map("classrooms")
+}
+
+// ─── ATTENDANCE ───────────────────────────────────────────────────────────────
+
+model Attendance {
+  id          String           @id @default(uuid())
+  studentId   String
+  date        DateTime         @db.Date
+  status      AttendanceStatus
+  term        Term
+  academicYear String
+  remarks     String?
+  markedBy    String?
+  createdAt   DateTime         @default(now())
+
+  student     Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, date])
+  @@map("attendance")
+}
+
+// ─── FEES ────────────────────────────────────────────────────────────────────
+
+model FeeStructure {
+  id           String     @id @default(uuid())
+  classLevel   ClassLevel
+  term         Term
+  academicYear String
+  amount       Float
+  dueDate      DateTime
+  description  String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  fees         Fee[]
+
+  @@unique([classLevel, term, academicYear])
+  @@map("fee_structures")
+}
+
+model Fee {
+  id             String        @id @default(uuid())
+  studentId      String
+  feeStructureId String
+  term           Term
+  academicYear   String
+  amountDue      Float
+  amountPaid     Float         @default(0)
+  status         FeeStatus     @default(PENDING)
+  dueDate        DateTime
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  student        Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  feeStructure   FeeStructure  @relation(fields: [feeStructureId], references: [id])
+  payments       Payment[]
+
+  @@unique([studentId, feeStructureId])
+  @@map("fees")
+}
+
+model Payment {
+  id              String        @id @default(uuid())
+  feeId           String
+  amount          Float
+  method          PaymentMethod
+  reference       String?       @unique
+  paystackRef     String?
+  mobileMoneyRef  String?
+  receiptNumber   String        @unique @default(uuid())
+  paidAt          DateTime      @default(now())
+  recordedBy      String?
+  notes           String?
+
+  fee             Fee           @relation(fields: [feeId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+// ─── RESULTS ─────────────────────────────────────────────────────────────────
+
+model Subject {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  results     Result[]
+  timetable   TimetableSlot[]
+
+  @@map("subjects")
+}
+
+model Result {
+  id           String     @id @default(uuid())
+  studentId    String
+  subjectId    String
+  teacherId    String?
+  term         Term
+  academicYear String
+  classTest    Float?     @default(0)
+  midTerm      Float?     @default(0)
+  endOfTerm    Float?     @default(0)
+  totalScore   Float?
+  grade        String?
+  remarks      String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  student      Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject      Subject    @relation(fields: [subjectId], references: [id])
+  teacher      Teacher?   @relation(fields: [teacherId], references: [id])
+
+  @@unique([studentId, subjectId, term, academicYear])
+  @@map("results")
+}
+
+// ─── TIMETABLE ───────────────────────────────────────────────────────────────
+
+model TimetableSlot {
+  id          String     @id @default(uuid())
+  classRoomId String
+  subjectId   String
+  teacherId   String?
+  dayOfWeek   Int        // 1=Monday … 5=Friday
+  startTime   String     // "08:00"
+  endTime     String     // "09:00"
+  academicYear String
+  term        Term
+  createdAt   DateTime   @default(now())
+
+  classroom   ClassRoom  @relation(fields: [classRoomId], references: [id], onDelete: Cascade)
+  subject     Subject    @relation(fields: [subjectId], references: [id])
+  teacher     Teacher?   @relation(fields: [teacherId], references: [id])
+
+  @@map("timetable_slots")
+}
+
+// ─── NOTICES ─────────────────────────────────────────────────────────────────
+
+model Notice {
+  id          String         @id @default(uuid())
+  title       String
+  body        String
+  type        NoticeType     @default(GENERAL)
+  priority    NoticePriority @default(LOW)
+  publishedAt DateTime       @default(now())
+  expiresAt   DateTime?
+  authorId    String?
+  targetRoles Role[]
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  author      Teacher?       @relation(fields: [authorId], references: [id])
+
+  @@map("notices")
+}
+
+// ─── EVENTS ──────────────────────────────────────────────────────────────────
+
+model Event {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  eventDate   DateTime
+  endDate     DateTime?
+  location    String?
+  type        String   @default("general")
+  color       String   @default("#29B6E8")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("events")
+}
+
+// ─── LIBRARY ─────────────────────────────────────────────────────────────────
+
+model LibraryBook {
+  id          String   @id @default(uuid())
+  title       String
+  author      String
+  isbn        String?  @unique
+  genre       String?
+  targetClass String?
+  totalCopies Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  loans       LibraryLoan[]
+
+  @@map("library_books")
+}
+
+model LibraryLoan {
+  id          String    @id @default(uuid())
+  bookId      String
+  studentId   String
+  borrowedAt  DateTime  @default(now())
+  dueDate     DateTime
+  returnedAt  DateTime?
+  isOverdue   Boolean   @default(false)
+
+  book        LibraryBook @relation(fields: [bookId], references: [id])
+  student     Student     @relation(fields: [studentId], references: [id])
+
+  @@map("library_loans")
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("general")
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
